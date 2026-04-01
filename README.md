@@ -129,16 +129,16 @@ sudo apt install ffmpeg
 
 - **若使用 GPU 运行自动生成字幕功能，需要先安装 cuda，安装方法见[cuda 安装](https://blog.csdn.net/chen565884393/article/details/127905428)。**
 
-_若想用 python 环境运行，需安装以下依赖_
+_若想用 python 环境运行，先安装基础依赖；如果需要字幕转写，再安装可选依赖_
 
 - python，[下载](https://www.python.org/ftp/python/3.9.4/python-3.9.4-amd64.exe)并安装
-- python 第三方库。打开命令行，运行如下命令安装：
+- 基础依赖。打开命令行，运行如下命令安装：
 
 ```bash
 uv sync
 ```
 
-- 安装语音转文字的依赖：（依赖于 pytorch，若未安装 pytorch，会自动安装，但是 cpu 版本。安装 cuda 版本的 pytorch 方法见[pytorch 官网](https://pytorch.org/get-started/locally/)。）
+- 如果需要自动生成字幕，再安装语音转文字的可选依赖：（依赖于 pytorch，若未安装 pytorch，会自动安装，但是 cpu 版本。安装 cuda 版本的 pytorch 方法见[pytorch 官网](https://pytorch.org/get-started/locally/)。）
 
 ```bash
 uv sync --extra whisper

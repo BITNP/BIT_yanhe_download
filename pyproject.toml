@@ -6,8 +6,12 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "Flask",
-    "openai-whisper>=20250625",
     "requests",
     "windows-curses; platform_system == 'Windows'",
+]
+
+[project.optional-dependencies]
+whisper = [
+    "openai-whisper>=20250625",
     "zhconv>=1.4.3",
 ]
