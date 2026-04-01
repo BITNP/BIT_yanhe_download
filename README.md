@@ -36,6 +36,12 @@ javascript:alert(JSON.parse(localStorage.auth).token)
 
 双击运行 `webui_interface.exe` 文件打开网页服务器，会自动弹出浏览器网页。
 
+如果使用 Python 环境启动，运行：
+
+```bash
+uv run python webui_interface.py
+```
+
 而后在打开的网页中新建任务即可。
 
 下载类型可选摄像头（即教室后的摄像头录像）或电脑屏幕（即教室电脑的屏幕信号）。
@@ -57,6 +63,12 @@ javascript:alert(JSON.parse(localStorage.auth).token)
 ### 命令行 GUI 交互
 
 打开命令行（在 `release_downloader.zip `解压的文件夹地址栏中搜索 cmd），在命令行中输入 `gui.exe` 文件运行。直接双击运行可能会有字符对不齐的问题，导致难以识别文字。最好将命令行窗口最大化以免字符显示不全。
+
+如果使用 Python 环境启动，运行：
+
+```bash
+uv run python gui.py
+```
 
 ![image-20240413001454717](md/README/image-20240413001454717.png)
 
@@ -120,16 +132,16 @@ sudo apt install ffmpeg
 _若想用 python 环境运行，需安装以下依赖_
 
 - python，[下载](https://www.python.org/ftp/python/3.9.4/python-3.9.4-amd64.exe)并安装
-- python 第三方库 requests。打开命令行，运行如下命令安装：
+- python 第三方库。打开命令行，运行如下命令安装：
 
 ```bash
-pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+uv sync
 ```
 
 - 安装语音转文字的依赖：（依赖于 pytorch，若未安装 pytorch，会自动安装，但是 cpu 版本。安装 cuda 版本的 pytorch 方法见[pytorch 官网](https://pytorch.org/get-started/locally/)。）
 
 ```bash
-pip install -r requirements_whisper.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+uv sync --extra whisper
 ```
 
 ## 注意
@@ -144,13 +156,12 @@ pip install -r requirements_whisper.txt -i https://pypi.tuna.tsinghua.edu.cn/sim
 使用如下命令打包：
 
 ```bash
-# 若未安装pyinstaller，运行以下命令安装
-pip install pyinstaller
+uv add --dev pyinstaller
 # 打包
-pyinstaller -F main.py -i yhkt.ico
-pyinstaller -F gui.py -i yhkt.ico
-pyinstaller -F webui_interface.py --add-data webui:webui --add-data templates:templates -i yhkt.ico
-pyinstaller -F gen_caption.py -i yhkt.ico
+uv run pyinstaller -F main.py -i yhkt.ico
+uv run pyinstaller -F gui.py -i yhkt.ico
+uv run pyinstaller -F webui_interface.py --add-data webui:webui --add-data templates:templates -i yhkt.ico
+uv run pyinstaller -F gen_caption.py -i yhkt.ico
 ```
 
 打包 `gen_caption.py`时可能会失败，提示递归过深：
@@ -166,7 +177,7 @@ import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 5)
 再使用如下命令打包：
 
 ```bash
-pyinstaller --clean .\gen_caption.spec
+uv run pyinstaller --clean .\gen_caption.spec
 ```
 
 打包完成后运行若出现 Temp 目录下的文件未找到：
