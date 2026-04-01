@@ -32,18 +32,19 @@ def seconds_to_hmsm(seconds):
 def main():
     # 视频文件路径
     video_paths = []
+    media_extensions = (".mp4", ".aac")
     if len(sys.argv) >= 2:
         video_paths.append(sys.argv[1])
     else:
         files = []
         for dirpath, dirnames, filenames in os.walk("."):
             for filename in filenames:
-                if filename.endswith(".mp4"):
+                if filename.endswith(media_extensions):
                     files.append(os.path.join(dirpath, filename).replace("\\", "/"))
         for i, f in enumerate(files):
             print(f"[{i}]: ", f)
         input_list = eval(
-            "[" + input("select a video file by input a num(split with ','): ") + "]"
+            "[" + input("select a media file by input a num(split with ','): ") + "]"
         )
         for i in input_list:
             video_paths.append(files[i])
@@ -62,9 +63,12 @@ def main():
         print("selected model:", model_name)
 
     for video_path in video_paths:
-        audio_path = video_path.replace("mp4", "m4a")
-        cmd = f'ffmpeg -i "{video_path}" -vn -ar {whisper.audio.SAMPLE_RATE} "{audio_path}"'
-        os.system(cmd)
+        base_path, ext = os.path.splitext(video_path)
+        audio_path = video_path
+        if ext.lower() == ".mp4":
+            audio_path = base_path + ".m4a"
+            cmd = f'ffmpeg -i "{video_path}" -vn -ar {whisper.audio.SAMPLE_RATE} "{audio_path}"'
+            os.system(cmd)
 
         model = whisper.load_model(model_name, download_root="whisper_models/")
 
@@ -73,7 +77,7 @@ def main():
         print("Time cost: ", time.time() - start)
 
         # 写入字幕文件
-        with open(video_path.replace("mp4", "srt"), "w", encoding="utf-8") as f:
+        with open(base_path + ".srt", "w", encoding="utf-8") as f:
             i = 1
             for r in result["segments"]:
                 f.write(str(i) + "\n")
@@ -90,7 +94,8 @@ def main():
                 f.write("\n")
 
         # 删除音频文件
-        os.remove(audio_path)
+        if audio_path != video_path:
+            os.remove(audio_path)
 
 
 if __name__ == "__main__":
