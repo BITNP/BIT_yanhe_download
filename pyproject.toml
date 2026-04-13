@@ -1,0 +1,17 @@
+[project]
+name = "bit-yanhe-download"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "Flask",
+    "requests",
+    "windows-curses; platform_system == 'Windows'",
+]
+
+[project.optional-dependencies]
+whisper = [
+    "openai-whisper>=20250625",
+    "zhconv>=1.4.3",
+]
