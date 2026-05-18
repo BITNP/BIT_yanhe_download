@@ -14,6 +14,10 @@ from gen_caption import DEFAULT_CLI_MODEL, seconds_to_hmsm
 MEDIA_EXTENSIONS = (".mp4",)
 
 
+def log(message: str) -> None:
+    print(message, flush=True)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Generate captions for downloaded video/audio pairs, then search homework hits per lesson."
@@ -44,6 +48,11 @@ def parse_args():
         "--overwrite-srt",
         action="store_true",
         help="Regenerate captions even when the .srt file already exists.",
+    )
+    parser.add_argument(
+        "--whisper-progress",
+        action="store_true",
+        help="Show Whisper's internal tqdm progress while transcribing. Hidden by default.",
     )
     parser.add_argument(
         "-k",
@@ -133,7 +142,13 @@ def write_srt(segments: list[dict], srt_path: Path) -> None:
             f.write(convert(segment["text"], "zh-cn") + "\n\n")
 
 
-def generate_caption(model, media_path: Path, srt_path: Path, device: str) -> None:
+def generate_caption(
+    model,
+    media_path: Path,
+    srt_path: Path,
+    device: str,
+    whisper_progress: bool,
+) -> None:
     audio_path = media_path
     remove_audio = False
     if media_path.suffix.lower() == ".mp4":
@@ -144,12 +159,12 @@ def generate_caption(model, media_path: Path, srt_path: Path, device: str) -> No
         start = time.time()
         result = model.transcribe(
             str(audio_path),
-            verbose=False,
+            verbose=False if whisper_progress else None,
             language="zh",
             fp16=(device == "cuda"),
         )
         write_srt(result["segments"], srt_path)
-        print(f"[caption done] {srt_path} ({time.time() - start:.1f}s)")
+        log(f"[caption done] {srt_path} ({time.time() - start:.1f}s)")
     finally:
         if remove_audio and audio_path.exists():
             audio_path.unlink()
@@ -173,37 +188,62 @@ def write_homework_report(
 
 
 def main():
+    start_time = time.time()
     args = parse_args()
     root = Path(args.root)
     output_root = Path(args.output)
     videos = find_video_files(root)
     if not videos:
-        print(f"No .mp4 files found under {root}")
+        log(f"No .mp4 files found under {root}")
         return
 
     device = select_device(args.device)
     keywords = find_homework.load_keywords(args)
     offsets = find_homework.parse_offsets(args.screenshot_offsets)
 
-    print(f"Found {len(videos)} video file(s).")
-    print(f"Using Whisper model: {args.model}")
-    print(f"Using device: {device}")
+    log(f"Found {len(videos)} video file(s).")
+    log(f"Using Whisper model: {args.model}")
+    log(f"Using device: {device}")
     if device == "cuda":
-        print(f"CUDA device: {torch.cuda.get_device_name(0)}")
+        log(f"CUDA device: {torch.cuda.get_device_name(0)}")
 
-    model = whisper.load_model(args.model, device=device, download_root="whisper_models/")
+    captions_to_generate = [
+        video_path
+        for video_path in videos
+        if args.overwrite_srt or not video_path.with_suffix(".srt").exists()
+    ]
+    log(f"Captions to generate: {len(captions_to_generate)}")
+
+    model = None
+    if captions_to_generate:
+        model = whisper.load_model(args.model, device=device, download_root="whisper_models/")
+
+    generated_captions = 0
+    skipped_captions = 0
+    total_hits = 0
+    total_events = 0
 
     for index, video_path in enumerate(videos, 1):
         media_path = media_for_video(video_path)
         srt_path = video_path.with_suffix(".srt")
         lesson_output = output_root / find_homework.safe_stem(video_path)
 
-        print(f"[{index}/{len(videos)}] {video_path}")
-        print(f"[media] {media_path}")
+        log(f"[{index}/{len(videos)}] {video_path}")
+        log(f"[media] {media_path}")
         if args.overwrite_srt or not srt_path.exists():
-            generate_caption(model, media_path, srt_path, device)
+            if model is None:
+                raise RuntimeError("Internal error: caption generation requires a loaded Whisper model.")
+            generate_caption(
+                model,
+                media_path,
+                srt_path,
+                device,
+                args.whisper_progress,
+            )
+            generated_captions += 1
         else:
-            print(f"[caption skip] {srt_path}")
+            log(f"[caption skip] {srt_path}")
+            skipped_captions += 1
 
         hit_count, event_count, csv_path = write_homework_report(
             srt_path=srt_path,
@@ -214,7 +254,18 @@ def main():
             no_screenshots=args.no_screenshots,
             case_sensitive=args.case_sensitive,
         )
-        print(f"[homework done] {hit_count} hit(s), {event_count} event(s): {csv_path}")
+        total_hits += hit_count
+        total_events += event_count
+        log(f"[homework done] {hit_count} hit(s), {event_count} event(s): {csv_path}")
+
+    log("[summary]")
+    log(f"Videos processed: {len(videos)}")
+    log(f"Captions generated: {generated_captions}")
+    log(f"Captions skipped: {skipped_captions}")
+    log(f"Homework hits: {total_hits}")
+    log(f"Homework events: {total_events}")
+    log(f"Output directory: {output_root}")
+    log(f"Elapsed: {time.time() - start_time:.1f}s")
 
 
 if __name__ == "__main__":

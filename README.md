@@ -162,8 +162,11 @@ uv run python batch_homework.py output
 uv run python batch_homework.py output --no-screenshots
 uv run python batch_homework.py output --device cuda --model large-v3-turbo
 uv run python batch_homework.py output --overwrite-srt
+uv run python batch_homework.py output --whisper-progress
 uv run python batch_homework.py output -k 作业 -k 提交 -k 截止
 ```
+
+默认只显示批处理级别日志；如果需要查看 Whisper 转写时的内部进度条，可以加 `--whisper-progress`。
 
 ## 依赖
 
