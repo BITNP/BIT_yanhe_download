@@ -148,6 +148,23 @@ uv run python find_homework.py output --merge-gap 120
 uv run python find_homework.py output --merge-gap 0
 ```
 
+如果要对已下载的一批屏幕视频批量生成字幕并逐节课搜索作业，可以运行：
+
+```bash
+uv run python batch_homework.py output
+```
+
+脚本会扫描 `output/` 下的 `.mp4` 文件，优先使用同名 `.aac` 生成字幕，已有 `.srt` 会自动跳过。每节课的报告会分别保存到 `homework_results/视频名/homework_hits.csv`，截图保存到对应目录的 `screenshots/` 中。
+
+常用参数示例：
+
+```bash
+uv run python batch_homework.py output --no-screenshots
+uv run python batch_homework.py output --device cuda --model large-v3-turbo
+uv run python batch_homework.py output --overwrite-srt
+uv run python batch_homework.py output -k 作业 -k 提交 -k 截止
+```
+
 ## 依赖
 
 - ffmpeg，已在 Release 中提供。若在 Linux 环境下运行，需手动安装 ffmpeg：
