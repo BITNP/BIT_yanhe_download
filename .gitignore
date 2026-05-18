@@ -7,7 +7,7 @@ build/
 dist/
 *.spec
 whisper_models/
-homework_results/
+homework_results*/
 release_*/
 *.json
 .idea

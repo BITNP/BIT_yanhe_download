@@ -8,6 +8,7 @@ from pathlib import Path
 
 DEFAULT_KEYWORDS = ["作业"]
 DEFAULT_SCREENSHOT_OFFSETS = [0.0]
+DEFAULT_MERGE_GAP = 60.0
 MEDIA_EXTENSIONS = (".mp4", ".mkv", ".mov", ".avi")
 
 
@@ -25,7 +26,37 @@ class HomeworkHit:
     srt_path: Path
     segment: SubtitleSegment
     keywords: list[str]
+
+
+@dataclass
+class HomeworkEvent:
+    video_path: Path | None
+    srt_path: Path
+    hits: list[HomeworkHit]
     screenshots: list[Path]
+
+    @property
+    def start(self) -> float:
+        return self.hits[0].segment.start
+
+    @property
+    def end(self) -> float:
+        return max(hit.segment.end for hit in self.hits)
+
+    @property
+    def keywords(self) -> list[str]:
+        seen = set()
+        keywords = []
+        for hit in self.hits:
+            for keyword in hit.keywords:
+                if keyword not in seen:
+                    seen.add(keyword)
+                    keywords.append(keyword)
+        return keywords
+
+    @property
+    def text(self) -> str:
+        return " ".join(hit.segment.text for hit in self.hits)
 
 
 def parse_args():
@@ -57,7 +88,13 @@ def parse_args():
     parser.add_argument(
         "--screenshot-offsets",
         default="0",
-        help="Comma-separated seconds relative to each matched subtitle start, e.g. -10,0,10.",
+        help="Comma-separated seconds relative to each matched event start, e.g. -10,0,10.",
+    )
+    parser.add_argument(
+        "--merge-gap",
+        type=float,
+        default=DEFAULT_MERGE_GAP,
+        help="Merge hits in the same video when the next hit starts within this many seconds. Defaults to 60. Use 0 to disable.",
     )
     parser.add_argument(
         "--no-screenshots",
@@ -224,29 +261,57 @@ def collect_hits(
                         srt_path=srt_path,
                         segment=segment,
                         keywords=matched,
-                        screenshots=[],
                     )
                 )
     return hits
 
 
-def add_screenshots(hits: list[HomeworkHit], output_dir: Path, offsets: list[float]) -> None:
+def merge_hits(hits: list[HomeworkHit], merge_gap: float) -> list[HomeworkEvent]:
+    events = []
+    current_event = None
+    sorted_hits = sorted(
+        hits,
+        key=lambda hit: (str(hit.srt_path), hit.segment.start, hit.segment.index),
+    )
+
+    for hit in sorted_hits:
+        if (
+            current_event is None
+            or current_event.srt_path != hit.srt_path
+            or hit.segment.start - current_event.end > merge_gap
+        ):
+            current_event = HomeworkEvent(
+                video_path=hit.video_path,
+                srt_path=hit.srt_path,
+                hits=[hit],
+                screenshots=[],
+            )
+            events.append(current_event)
+        else:
+            current_event.hits.append(hit)
+
+    return events
+
+
+def add_screenshots(
+    events: list[HomeworkEvent], output_dir: Path, offsets: list[float]
+) -> None:
     screenshot_dir = output_dir / "screenshots"
-    for hit in hits:
-        if not hit.video_path:
+    for event_index, event in enumerate(events, 1):
+        if not event.video_path:
             continue
-        video_stem = safe_stem(hit.video_path)
+        video_stem = safe_stem(event.video_path)
         for offset in offsets:
-            timestamp = max(0.0, hit.segment.start + offset)
+            timestamp = max(0.0, event.start + offset)
             screenshot_name = (
-                f"{video_stem}_sub{hit.segment.index:04d}_{timestamp_for_filename(timestamp)}.jpg"
+                f"{video_stem}_event{event_index:04d}_{timestamp_for_filename(timestamp)}.jpg"
             )
             screenshot_path = screenshot_dir / screenshot_name
-            if capture_screenshot(hit.video_path, timestamp, screenshot_path):
-                hit.screenshots.append(screenshot_path)
+            if capture_screenshot(event.video_path, timestamp, screenshot_path):
+                event.screenshots.append(screenshot_path)
 
 
-def write_csv(hits: list[HomeworkHit], output_dir: Path) -> Path:
+def write_csv(events: list[HomeworkEvent], output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     csv_path = output_dir / "homework_hits.csv"
     with csv_path.open("w", encoding="utf-8-sig", newline="") as f:
@@ -255,25 +320,27 @@ def write_csv(hits: list[HomeworkHit], output_dir: Path) -> Path:
             [
                 "srt",
                 "video",
-                "subtitle_index",
                 "start",
                 "end",
+                "hit_count",
+                "subtitle_indexes",
                 "keywords",
                 "text",
                 "screenshots",
             ]
         )
-        for hit in hits:
+        for event in events:
             writer.writerow(
                 [
-                    str(hit.srt_path),
-                    str(hit.video_path or ""),
-                    hit.segment.index,
-                    format_timestamp(hit.segment.start),
-                    format_timestamp(hit.segment.end),
-                    "|".join(hit.keywords),
-                    hit.segment.text,
-                    "|".join(str(path) for path in hit.screenshots),
+                    str(event.srt_path),
+                    str(event.video_path or ""),
+                    format_timestamp(event.start),
+                    format_timestamp(event.end),
+                    len(event.hits),
+                    "|".join(str(hit.segment.index) for hit in event.hits),
+                    "|".join(event.keywords),
+                    event.text,
+                    "|".join(str(path) for path in event.screenshots),
                 ]
             )
     return csv_path
@@ -292,12 +359,13 @@ def main():
         return
 
     hits = collect_hits(srt_files, keywords, args.case_sensitive)
+    events = merge_hits(hits, args.merge_gap)
     if not args.no_screenshots:
-        add_screenshots(hits, output_dir, offsets)
+        add_screenshots(events, output_dir, offsets)
 
-    csv_path = write_csv(hits, output_dir)
+    csv_path = write_csv(events, output_dir)
     print(f"Scanned {len(srt_files)} subtitle file(s).")
-    print(f"Found {len(hits)} hit(s) for keywords: {', '.join(keywords)}")
+    print(f"Found {len(hits)} hit(s) in {len(events)} event(s) for keywords: {', '.join(keywords)}")
     print(f"Report: {csv_path}")
 
 

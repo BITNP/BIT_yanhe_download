@@ -126,7 +126,7 @@ _tips: 语音转文字所需的时间较长，可以先观看视频，字幕生�
 uv run python find_homework.py output
 ```
 
-默认只搜索关键词 `作业`，结果会保存到 `homework_results/homework_hits.csv`，截图会保存到 `homework_results/screenshots/`。
+默认只搜索关键词 `作业`，并把同一视频内相隔不超过 60 秒的命中合并为一个作业事件。结果会保存到 `homework_results/homework_hits.csv`，截图会保存到 `homework_results/screenshots/`。
 
 如需扩展关键词，可以多次传入 `-k`，或使用关键词文件：
 
@@ -139,6 +139,13 @@ uv run python find_homework.py output --keywords-file homework_keywords.txt
 
 ```bash
 uv run python find_homework.py output --no-screenshots
+```
+
+如需调整 CSV 和截图的时间窗口去重范围：
+
+```bash
+uv run python find_homework.py output --merge-gap 120
+uv run python find_homework.py output --merge-gap 0
 ```
 
 ## 依赖
