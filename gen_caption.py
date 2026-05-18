@@ -8,6 +8,12 @@ from zhconv import convert  # 简繁体转换
 
 DEFAULT_CLI_MODEL = "large-v3-turbo"
 
+# Known noise phrases hallucinated by whisper due to training data contamination.
+# Extend this list when new contamination patterns are discovered.
+NOISE_PHRASES = [
+    "明镜与点点",  # 匹配各种 whisper 变体：明镜与点点栏目/栗目/株目...
+]
+
 
 def seconds_to_hmsm(seconds):
     """
@@ -85,6 +91,10 @@ def main():
         with open(base_path + ".srt", "w", encoding="utf-8") as f:
             i = 1
             for r in result["segments"]:
+                # 过滤 whisper 数据污染产生的噪声短语
+                text = convert(r["text"], "zh-cn")
+                if any(phrase in text for phrase in NOISE_PHRASES):
+                    continue
                 f.write(str(i) + "\n")
                 f.write(
                     seconds_to_hmsm(float(r["start"]))
@@ -93,9 +103,7 @@ def main():
                     + "\n"
                 )
                 i += 1
-                f.write(
-                    convert(r["text"], "zh-cn") + "\n"
-                )  # 结果可能是繁体，转为简体zh-cn
+                f.write(text + "\n")
                 f.write("\n")
 
         # 删除音频文件

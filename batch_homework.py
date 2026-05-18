@@ -8,7 +8,7 @@ import whisper
 from zhconv import convert
 
 import find_homework
-from gen_caption import DEFAULT_CLI_MODEL, seconds_to_hmsm
+from gen_caption import DEFAULT_CLI_MODEL, NOISE_PHRASES, seconds_to_hmsm
 
 
 MEDIA_EXTENSIONS = (".mp4",)
@@ -129,17 +129,30 @@ def extract_audio(video_path: Path) -> Path:
     return audio_path
 
 
+def contains_noise(text: str) -> bool:
+    """Return True if text contains any known noise phrase from whisper contamination."""
+    for phrase in NOISE_PHRASES:
+        if phrase in text:
+            return True
+    return False
+
+
 def write_srt(segments: list[dict], srt_path: Path) -> None:
     with srt_path.open("w", encoding="utf-8") as f:
-        for index, segment in enumerate(segments, 1):
-            f.write(f"{index}\n")
+        srt_index = 0
+        for segment in segments:
+            text = convert(segment["text"], "zh-cn")
+            if contains_noise(text):
+                continue
+            srt_index += 1
+            f.write(f"{srt_index}\n")
             f.write(
                 seconds_to_hmsm(float(segment["start"]))
                 + " --> "
                 + seconds_to_hmsm(float(segment["end"]))
                 + "\n"
             )
-            f.write(convert(segment["text"], "zh-cn") + "\n\n")
+            f.write(text + "\n\n")
 
 
 def generate_caption(
