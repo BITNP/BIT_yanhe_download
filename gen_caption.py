@@ -11,7 +11,8 @@ DEFAULT_CLI_MODEL = "large-v3-turbo"
 # Known noise phrases hallucinated by whisper due to training data contamination.
 # Extend this list when new contamination patterns are discovered.
 NOISE_PHRASES = [
-    "明镜与点点",  # 匹配各种 whisper 变体：明镜与点点栏目/栗目/株目...
+    "明镜与点点",  # 匹配变体：明镜与点点栏目/栗目/株目...
+    "字幕志愿者",  # 匹配变体：字幕志愿者 李宗盛/杨茜茜...
 ]
 
 
