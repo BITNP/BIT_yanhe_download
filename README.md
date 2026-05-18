@@ -118,6 +118,29 @@ uv run python gui.py
 
 _tips: 语音转文字所需的时间较长，可以先观看视频，字幕生成好了再重新打开视频享受字幕。使用 GPU 大约需要几分钟，不使用 GPU 则需要更长时间。_
 
+## 从字幕中定位作业
+
+生成 `.srt` 字幕后，可以用 `find_homework.py` 搜索“作业”相关字幕时间点，并从同名屏幕录像中截取对应画面：
+
+```bash
+uv run python find_homework.py output
+```
+
+默认只搜索关键词 `作业`，结果会保存到 `homework_results/homework_hits.csv`，截图会保存到 `homework_results/screenshots/`。
+
+如需扩展关键词，可以多次传入 `-k`，或使用关键词文件：
+
+```bash
+uv run python find_homework.py output -k 作业 -k 提交 -k 截止
+uv run python find_homework.py output --keywords-file homework_keywords.txt
+```
+
+如果只想生成时间点报告、不截图：
+
+```bash
+uv run python find_homework.py output --no-screenshots
+```
+
 ## 依赖
 
 - ffmpeg，已在 Release 中提供。若在 Linux 环境下运行，需手动安装 ffmpeg：

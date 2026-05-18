@@ -6,6 +6,9 @@ import whisper
 from zhconv import convert  # 简繁体转换
 
 
+DEFAULT_CLI_MODEL = "large-v3-turbo"
+
+
 def seconds_to_hmsm(seconds):
     """
     输入一个秒数，输出为H:M:S:M时间格式
@@ -35,6 +38,8 @@ def main():
     media_extensions = (".mp4", ".aac")
     if len(sys.argv) >= 2:
         video_paths.append(sys.argv[1])
+        model_name = sys.argv[2] if len(sys.argv) >= 3 else DEFAULT_CLI_MODEL
+        print("selected model:", model_name)
     else:
         files = []
         for dirpath, dirnames, filenames in os.walk("."):
