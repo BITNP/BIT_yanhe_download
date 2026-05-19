@@ -6,7 +6,7 @@ import whisper
 from zhconv import convert  # 简繁体转换
 
 
-DEFAULT_CLI_MODEL = "large-v3-turbo"
+DEFAULT_CLI_MODEL = "base"
 
 # Known noise phrases hallucinated by whisper due to training data contamination.
 # Extend this list when new contamination patterns are discovered.
@@ -67,11 +67,11 @@ def main():
                 continue
             print(f"[{len(models)}]: ", model)
             models.append(model)
-        model_index = input("select a model by input a num(default 'base'): ")
+        model_index = input(f"select a model by input a num(default '{DEFAULT_CLI_MODEL}'): ")
         try:
             model_name = models[eval(model_index)]
         except Exception:
-            model_name = "base"
+            model_name = DEFAULT_CLI_MODEL
         print("selected model:", model_name)
 
     for video_path in video_paths:
