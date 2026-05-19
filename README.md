@@ -118,6 +118,63 @@ uv run python gui.py
 
 _tips: 语音转文字所需的时间较长，可以先观看视频，字幕生成好了再重新打开视频享受字幕。使用 GPU 大约需要几分钟，不使用 GPU 则需要更长时间。_
 
+## 从字幕中定位作业
+
+生成 `.srt` 字幕后，可以用 `find_homework.py` 搜索“作业”相关字幕时间点，并从同名屏幕录像中截取对应画面：
+
+```bash
+uv run python find_homework.py output
+```
+
+默认只搜索关键词 `作业`，并把同一视频内相隔不超过 60 秒的命中合并为一个作业事件。结果会保存到 `homework_results/homework_hits.csv`，截图会保存到 `homework_results/screenshots/`。
+
+如需扩展关键词，可以多次传入 `-k`，或使用关键词文件：
+
+```bash
+uv run python find_homework.py output -k 作业 -k 提交 -k 截止
+uv run python find_homework.py output --keywords-file homework_keywords.txt
+```
+
+如果只想生成时间点报告、不截图：
+
+```bash
+uv run python find_homework.py output --no-screenshots
+```
+
+如需调整 CSV 和截图的时间窗口去重范围：
+
+```bash
+uv run python find_homework.py output --merge-gap 120
+uv run python find_homework.py output --merge-gap 0
+```
+
+如果要对已下载的一批屏幕视频批量生成字幕并逐节课搜索作业，可以运行：
+
+```bash
+uv run python batch_homework.py output
+```
+
+脚本会扫描 `output/` 下的 `.mp4` 文件，优先使用同名 `.aac` 生成字幕，已有 `.srt` 会自动跳过。每节课的报告会分别保存到 `homework_results/视频名/homework_hits.csv`，截图保存到对应目录的 `screenshots/` 中。
+
+如果只想处理某一门课程，传入该课程的子目录即可：
+
+```bash
+uv run python batch_homework.py "output/专利信息与科技创新-screen"
+```
+
+常用参数示例：
+
+```bash
+uv run python batch_homework.py output --output homework_results_batch
+uv run python batch_homework.py output --no-screenshots
+uv run python batch_homework.py output --device cuda --model large-v3-turbo
+uv run python batch_homework.py output --overwrite-srt
+uv run python batch_homework.py output --whisper-progress
+uv run python batch_homework.py output -k 作业 -k 提交 -k 截止
+```
+
+默认只显示批处理级别日志；如果需要查看 Whisper 转写时的内部进度条，可以加 `--whisper-progress`。
+
 ## 依赖
 
 - ffmpeg，已在 Release 中提供。若在 Linux 环境下运行，需手动安装 ffmpeg：

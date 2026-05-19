@@ -6,6 +6,16 @@ import whisper
 from zhconv import convert  # 简繁体转换
 
 
+DEFAULT_CLI_MODEL = "base"
+
+# Known noise phrases hallucinated by whisper due to training data contamination.
+# Extend this list when new contamination patterns are discovered.
+NOISE_PHRASES = [
+    "明镜与点点",  # 匹配变体：明镜与点点栏目/栗目/株目...
+    "字幕志愿者",  # 匹配变体：字幕志愿者 李宗盛/杨茜茜...
+]
+
+
 def seconds_to_hmsm(seconds):
     """
     输入一个秒数，输出为H:M:S:M时间格式
@@ -35,6 +45,8 @@ def main():
     media_extensions = (".mp4", ".aac")
     if len(sys.argv) >= 2:
         video_paths.append(sys.argv[1])
+        model_name = sys.argv[2] if len(sys.argv) >= 3 else DEFAULT_CLI_MODEL
+        print("selected model:", model_name)
     else:
         files = []
         for dirpath, dirnames, filenames in os.walk("."):
@@ -55,11 +67,11 @@ def main():
                 continue
             print(f"[{len(models)}]: ", model)
             models.append(model)
-        model_index = input("select a model by input a num(default 'base'): ")
+        model_index = input(f"select a model by input a num(default '{DEFAULT_CLI_MODEL}'): ")
         try:
             model_name = models[eval(model_index)]
         except Exception:
-            model_name = "base"
+            model_name = DEFAULT_CLI_MODEL
         print("selected model:", model_name)
 
     for video_path in video_paths:
@@ -80,6 +92,10 @@ def main():
         with open(base_path + ".srt", "w", encoding="utf-8") as f:
             i = 1
             for r in result["segments"]:
+                # 过滤 whisper 数据污染产生的噪声短语
+                text = convert(r["text"], "zh-cn")
+                if any(phrase in text for phrase in NOISE_PHRASES):
+                    continue
                 f.write(str(i) + "\n")
                 f.write(
                     seconds_to_hmsm(float(r["start"]))
@@ -88,9 +104,7 @@ def main():
                     + "\n"
                 )
                 i += 1
-                f.write(
-                    convert(r["text"], "zh-cn") + "\n"
-                )  # 结果可能是繁体，转为简体zh-cn
+                f.write(text + "\n")
                 f.write("\n")
 
         # 删除音频文件
