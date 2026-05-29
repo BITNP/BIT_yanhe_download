@@ -104,7 +104,7 @@ uv run python gui.py
 
 (
 26.5.29update:
-**[SenseCaption](https://github.com/ASP1R1N/SenseCaption)** —— 课程录像字幕生成工具
+**[SenseCaption](https://github.com/sukurajima-mai/SenseCaption)** —— 课程录像字幕生成工具
 
 下载录播后，用 SenseCaption 一键生成 SRT/VTT 字幕文件。基于 SenseVoiceSmall 本地推理，无需 GPU，中文识别效果好，支持批量处理和 LLM 后处理修正专业术语。
 发行版提供压缩包，打开即用部署方便
