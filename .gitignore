@@ -12,3 +12,6 @@ release_*/
 .idea
 .DS_Store
 auth.txt
+.snapshot/
+.vscode/
+gen_capture.py

@@ -4,8 +4,9 @@ import queue
 import re
 import signal
 import sys
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from subprocess import run
 
 import requests
@@ -51,7 +52,7 @@ class M3u8Download:
         workDir,
         name,
         max_workers=32,
-        num_retries=99,
+        num_retries=32,
         base64_key=None,
         progress_callback=dummy_func,
     ):
@@ -72,6 +73,10 @@ class M3u8Download:
         self._front_url = None
         self._ts_url_list = []
         self._success_sum = 0
+        self._failed_ts = []
+        self._success_lock = threading.Lock()
+        self._stop_signature_update = threading.Event()
+        self._last_progress_time = time.time()
         self._ts_sum = 0
         self._key = base64.b64decode(base64_key.encode()) if base64_key else None
         self._headers = {
@@ -92,29 +97,97 @@ class M3u8Download:
 
         signal.signal(signal.SIGINT, signal_handler)
         print(f"Downloading: {self._name}", f"Save path: {self._file_path}", sep="\n")
+
+        signature_thread = threading.Thread(
+            target=self.updateSignatureLoop,
+            daemon=True,
+        )
+        signature_thread.start()
+        monitor_thread = threading.Thread(
+            target=self.printStallStatusLoop,
+            daemon=True,
+        )
+        monitor_thread.start()
         with ThreadPoolExecutorWithQueueSizeLimit(self._max_workers) as pool:
-            pool.submit(self.updateSignatureLoop)
+            futures = []
             for k, ts_url in enumerate(self._ts_url_list):
-                pool.submit(
-                    self.download_ts,
-                    ts_url,
-                    # The `.ts` extension is mandatory for FFmpeg 7.1.1+.
-                    # https://git.ffmpeg.org/gitweb/ffmpeg.git/commit/b753bac08f6881b2d3dea8f1ab84c81550f35897
-                    # https://git.ffmpeg.org/gitweb/ffmpeg.git/commit/6c4e56f07d1a703435854f2156c881885f7798da
-                    os.path.join(self._file_path, f"{k}.ts"),
-                    self._num_retries,
+                futures.append(
+                    pool.submit(
+                        self.download_ts,
+                        ts_url,
+                        # The `.ts` extension is mandatory for FFmpeg 7.1.1+.
+                        # https://git.ffmpeg.org/gitweb/ffmpeg.git/commit/b753bac08f6881b2d3dea8f1ab84c81550f35897
+                        # https://git.ffmpeg.org/gitweb/ffmpeg.git/commit/6c4e56f07d1a703435854f2156c881885f7798da
+                        os.path.join(self._file_path, f"{k}.ts"),
+                        self._num_retries,
+                    )
                 )
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    self._failed_ts.append(str(e))
+                    print(f"\n{e}")
+        self._stop_signature_update.set()
+        signature_thread.join(timeout=1)
+        monitor_thread.join(timeout=1)
         if self._success_sum == self._ts_sum:
             self._progress_callback(self._success_sum, self._ts_sum, 1)
             self.output_mp4()
             self.delete_file()
             print(f"Download successfully --> {self._name}")
             self._progress_callback(self._success_sum, self._ts_sum, 2)
+        else:
+            print(
+                f"\nDownload incomplete: {self._success_sum}/{self._ts_sum}. "
+                "Please rerun; existing good .ts files will be skipped."
+            )
+
+    def _print_progress(self) -> None:
+        sys.stdout.write(
+            "\r[%-25s](%d/%d)"
+            % (
+                "*" * (100 * self._success_sum // self._ts_sum // 4),
+                self._success_sum,
+                self._ts_sum,
+            )
+        )
+        sys.stdout.flush()
 
     def updateSignatureLoop(self):
-        while self._success_sum != self._ts_sum:
+        while (
+            not self._stop_signature_update.is_set()
+            and self._success_sum != self._ts_sum
+        ):
             self.timestamp, self.signature = utils.getSignature()
             time.sleep(10)
+
+    def printStallStatusLoop(self):
+        while not self._stop_signature_update.is_set():
+            time.sleep(15)
+            if time.time() - self._last_progress_time < 30:
+                continue
+            part_files = []
+            if os.path.exists(self._file_path):
+                part_files = [
+                    f for f in os.listdir(self._file_path)
+                    if f.endswith(".part")
+                    and not os.path.exists(
+                        os.path.join(self._file_path, f[:-5])
+                    )
+                ]
+            part_files.sort(
+                key=lambda x: int(x.split(".", 1)[0])
+                if x.split(".", 1)[0].isdigit()
+                else x
+            )
+            preview = ", ".join(part_files[:8])
+            more = "" if len(part_files) <= 8 else f", ... +{len(part_files) - 8}"
+            print(
+                f"\nStill working: {self._success_sum}/{self._ts_sum}, "
+                f"active/incomplete parts: {len(part_files)}"
+                f"{f' ({preview}{more})' if part_files else ''}"
+            )
 
     def get_m3u8_info(self, m3u8_url: str, num_retries: int) -> None:
         """
@@ -189,14 +262,40 @@ class M3u8Download:
         """
         下载 .ts 文件
         """
-        if not self._token:
-            self._token = utils.getToken()
-        token = self._token
-        ts_url = utils.add_signature_for_url(
-            ts_url_original.split("\n")[0], token, self.timestamp, self.signature
-        )
-        try:
-            if not os.path.exists(name):
+        if os.path.exists(name):
+            tmp_name = name + ".part"
+            # A stale .part may be left from a previous interrupted run.  If
+            # the final .ts already exists, the .part is not needed and would
+            # only make the "Still working" monitor look confusing.
+            if os.path.exists(tmp_name):
+                os.remove(tmp_name)
+            # Resume/skip existing segment: still advance progress display.
+            with self._success_lock:
+                self._success_sum += 1
+                self._last_progress_time = time.time()
+                self._print_progress()
+            self._progress_callback(self._success_sum, self._ts_sum, 0)
+            return
+
+        tmp_name = name + ".part"
+        if os.path.exists(tmp_name):
+            os.remove(tmp_name)
+
+        last_error = None
+        for attempt in range(num_retries + 1):
+            try:
+                if not self._token:
+                    self._token = utils.getToken()
+                token = self._token
+                # Build the signed URL immediately before each retry.  A stale
+                # signature is one of the common reasons Yanhe segment downloads
+                # appear to "stop" after running for a while.
+                ts_url = utils.add_signature_for_url(
+                    ts_url_original.split("\n")[0],
+                    token,
+                    self.timestamp,
+                    self.signature,
+                )
                 with requests.get(
                     ts_url,
                     stream=True,
@@ -204,32 +303,38 @@ class M3u8Download:
                     verify=False,
                     headers=self._headers,
                 ) as res:
-                    if res.status_code == 200:
-                        with open(name, "wb") as ts:
-                            for chunk in res.iter_content(chunk_size=1024):
-                                if chunk:
-                                    ts.write(chunk)
-                        self._success_sum += 1
-                        sys.stdout.write(
-                            "\r[%-25s](%d/%d)"
-                            % (
-                                "*" * (100 * self._success_sum // self._ts_sum // 4),
-                                self._success_sum,
-                                self._ts_sum,
-                            )
+                    if res.status_code != 200:
+                        if res.status_code in (401, 403):
+                            self._token = utils.getToken()
+                        raise Exception(f"HTTP {res.status_code}")
+                    written = 0
+                    expected = int(res.headers.get("Content-Length") or 0)
+                    with open(tmp_name, "wb") as ts:
+                        for chunk in res.iter_content(chunk_size=1024):
+                            if chunk:
+                                ts.write(chunk)
+                                written += len(chunk)
+                    if expected and written != expected:
+                        raise Exception(
+                            f"Incomplete segment ({written}/{expected} bytes)"
                         )
-                        sys.stdout.flush()
-                    else:
-                        self.download_ts(ts_url_original, name, num_retries - 1)
-            else:
-                self._success_sum += 1
+                    os.replace(tmp_name, name)
+                with self._success_lock:
+                    self._success_sum += 1
+                    self._last_progress_time = time.time()
+                    self._print_progress()
+                self._progress_callback(self._success_sum, self._ts_sum, 0)
+                return
+            except Exception as e:
+                last_error = e
+                if os.path.exists(tmp_name):
+                    os.remove(tmp_name)
+                if os.path.exists(name):
+                    os.remove(name)
+                if attempt < num_retries:
+                    time.sleep(min(5, 0.2 * (attempt + 1)))
 
-            self._progress_callback(self._success_sum, self._ts_sum, 0)
-        except Exception:
-            if os.path.exists(name):
-                os.remove(name)
-            if num_retries > 0:
-                self.download_ts(ts_url_original, name, num_retries - 1)
+        raise RuntimeError(f"Failed to download {name}: {last_error}")
 
     def download_key(self, key_line, num_retries):
         """
@@ -266,17 +371,51 @@ class M3u8Download:
         """
         合并.ts文件，输出mp4格式视频，需要ffmpeg
         """
-        run(
-            [
-                "ffmpeg",
-                "-i", f"{self._file_path}.m3u8",
-                "-acodec", "copy",
-                "-vcodec", "copy",
-                "-f", "mp4",
-                f"{self._file_path}.mp4",
-            ],
-            check=True,
-        )
+        output_file = f"{self._file_path}.mp4"
+        tmp_output_file = f"{output_file}.part"
+        if os.path.exists(tmp_output_file):
+            os.remove(tmp_output_file)
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i", f"{self._file_path}.m3u8",
+            "-acodec", "copy",
+            "-vcodec", "copy",
+            "-f", "mp4",
+            tmp_output_file,
+        ]
+        fallback_cmd = [
+            "ffmpeg",
+            "-y",
+            # Some Yanhe segments occasionally contain a few corrupt TS packets.
+            # Dropping those packets is preferable to failing the whole merge.
+            "-fflags", "+discardcorrupt",
+            "-err_detect", "ignore_err",
+            "-i", f"{self._file_path}.m3u8",
+            "-acodec", "copy",
+            "-vcodec", "copy",
+            "-f", "mp4",
+            tmp_output_file,
+        ]
+        try:
+            run(
+                cmd,
+                check=True,
+            )
+        except Exception as e:
+            print(f"Normal ffmpeg merge failed, retry with corrupt-packet discard: {e}")
+            if os.path.exists(tmp_output_file):
+                os.remove(tmp_output_file)
+            run(
+                fallback_cmd,
+                check=True,
+            )
+        try:
+            os.replace(tmp_output_file, output_file)
+        except Exception:
+            if os.path.exists(tmp_output_file):
+                os.remove(tmp_output_file)
+            raise
 
     def delete_file(self):
         file = os.listdir(self._file_path)

@@ -1,14 +1,20 @@
+import argparse
 import os
-import sys
+import subprocess
 import time
 
 import whisper
 from zhconv import convert  # 简繁体转换
 
 
+VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".flv", ".webm"}
+AUDIO_EXTS = {".aac", ".m4a", ".mp3", ".wav", ".flac", ".ogg"}
+MEDIA_EXTS =  AUDIO_EXTS #|VIDEO_EXTS
+
+
 def seconds_to_hmsm(seconds):
     """
-    输入一个秒数，输出为H:M:S:M时间格式
+    输入一个秒数，输出为 H:M:S,M 时间格式
     @params:
         seconds   - Required  : 秒 (float)
     """
@@ -29,73 +35,161 @@ def seconds_to_hmsm(seconds):
     return f"{hours}:{minutes}:{seconds},{milliseconds}"
 
 
-def main():
-    # 视频文件路径
-    video_paths = []
-    media_extensions = (".mp4", ".aac")
-    if len(sys.argv) >= 2:
-        video_paths.append(sys.argv[1])
-    else:
-        files = []
-        for dirpath, dirnames, filenames in os.walk("."):
-            for filename in filenames:
-                if filename.endswith(media_extensions):
-                    files.append(os.path.join(dirpath, filename).replace("\\", "/"))
-        for i, f in enumerate(files):
-            print(f"[{i}]: ", f)
-        input_list = eval(
-            "[" + input("select a media file by input a num(split with ','): ") + "]"
-        )
-        for i in input_list:
-            video_paths.append(files[i])
-        print("selected video files:", video_paths)
-        models = []
-        for model in whisper.available_models():
-            if ".en" in model:
-                continue
-            print(f"[{len(models)}]: ", model)
-            models.append(model)
-        model_index = input("select a model by input a num(default 'base'): ")
-        try:
-            model_name = models[eval(model_index)]
-        except Exception:
-            model_name = "base"
-        print("selected model:", model_name)
+def is_video(path):
+    return os.path.splitext(path)[1].lower() in VIDEO_EXTS
 
-    for video_path in video_paths:
-        base_path, ext = os.path.splitext(video_path)
-        audio_path = video_path
-        if ext.lower() == ".mp4":
-            audio_path = base_path + ".m4a"
-            cmd = f'ffmpeg -i "{video_path}" -vn -ar {whisper.audio.SAMPLE_RATE} "{audio_path}"'
-            os.system(cmd)
 
-        model = whisper.load_model(model_name, download_root="whisper_models/")
+def is_audio(path):
+    return os.path.splitext(path)[1].lower() in AUDIO_EXTS
+
+
+def find_media_files(path="."):
+    """
+    path 可以是单个音视频文件，也可以是目录。
+    目录会递归查找其中所有支持的音视频文件。
+    """
+    path = os.path.abspath(path)
+    if os.path.isfile(path):
+        return [path] if os.path.splitext(path)[1].lower() in MEDIA_EXTS else []
+    if not os.path.isdir(path):
+        return []
+
+    files = []
+    for dirpath, _, filenames in os.walk(path):
+        for filename in filenames:
+            ext = os.path.splitext(filename)[1].lower()
+            if ext in MEDIA_EXTS:
+                files.append(os.path.join(dirpath, filename))
+    return sorted(files)
+
+
+def select_files_interactively():
+    files = find_media_files(".")
+    if not files:
+        raise FileNotFoundError("当前目录下没有找到支持的音视频文件")
+
+    for i, f in enumerate(files):
+        print(f"[{i}]: {f}")
+    input_list = eval(
+        "[" + input("select media files by input num(split with ','): ") + "]"
+    )
+    selected = [files[i] for i in input_list]
+    print("selected media files:", selected)
+    return selected
+
+
+def select_model_interactively():
+    models = []
+    for model in whisper.available_models():
+        if ".en" in model:
+            continue
+        print(f"[{len(models)}]: {model}")
+        models.append(model)
+    model_index = input("select a model by input a num(default 'base'): ")
+    try:
+        return models[eval(model_index)]
+    except Exception:
+        return "base"
+
+
+def extract_audio(video_path, audio_path):
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            video_path,
+            "-vn",
+            "-ar",
+            str(whisper.audio.SAMPLE_RATE),
+            audio_path,
+        ],
+        check=True,
+    )
+
+
+def write_srt(result, srt_path):
+    with open(srt_path, "w", encoding="utf-8") as f:
+        for i, r in enumerate(result["segments"], start=1):
+            f.write(str(i) + "\n")
+            f.write(
+                seconds_to_hmsm(float(r["start"]))
+                + " --> "
+                + seconds_to_hmsm(float(r["end"]))
+                + "\n"
+            )
+            f.write(convert(r["text"], "zh-cn") + "\n\n")
+
+
+def transcribe_media(media_path, model):
+    base_path, ext = os.path.splitext(media_path)
+    srt_path = base_path + ".srt"
+    temp_audio_path = base_path + ".whisper.m4a"
+    audio_for_whisper = media_path
+
+    print(f"\nInput: {media_path}")
+    print(f"Output srt: {srt_path}")
+
+    try:
+        if is_video(media_path):
+            # 视频需要先抽取音频；音频文件则直接交给 Whisper。
+            print(f"Audio temp: {temp_audio_path}")
+            extract_audio(media_path, temp_audio_path)
+            audio_for_whisper = temp_audio_path
+        elif not is_audio(media_path):
+            print(f"Skip unsupported file: {media_path}")
+            return
 
         start = time.time()
-        result = model.transcribe(audio_path, verbose=False, language="zh")
+        result = model.transcribe(audio_for_whisper, verbose=False, language="zh")
         print("Time cost: ", time.time() - start)
 
-        # 写入字幕文件
-        with open(base_path + ".srt", "w", encoding="utf-8") as f:
-            i = 1
-            for r in result["segments"]:
-                f.write(str(i) + "\n")
-                f.write(
-                    seconds_to_hmsm(float(r["start"]))
-                    + " --> "
-                    + seconds_to_hmsm(float(r["end"]))
-                    + "\n"
-                )
-                i += 1
-                f.write(
-                    convert(r["text"], "zh-cn") + "\n"
-                )  # 结果可能是繁体，转为简体zh-cn
-                f.write("\n")
+        write_srt(result, srt_path)
+    finally:
+        if os.path.exists(temp_audio_path):
+            os.remove(temp_audio_path)
 
-        # 删除音频文件
-        if audio_path != video_path:
-            os.remove(audio_path)
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Generate .srt captions for video/audio files."
+    )
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        help=(
+            "音视频文件或目录；目录会递归处理 mp4/mov/mkv/avi/flv/webm "
+            "以及 aac/m4a/mp3/wav/flac/ogg。不传则交互选择。"
+        ),
+    )
+    parser.add_argument(
+        "-m",
+        "--model",
+        default=None,
+        help="Whisper 模型名，例如 tiny/base/small/medium/large。默认交互选择或 base。",
+    )
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    if args.paths:
+        media_paths = []
+        for path in args.paths:
+            media_paths.extend(find_media_files(path))
+        if not media_paths:
+            raise FileNotFoundError("传入的路径里没有找到支持的音视频文件")
+        model_name = args.model or "base"
+    else:
+        media_paths = select_files_interactively()
+        model_name = args.model or select_model_interactively()
+
+    print("selected model:", model_name)
+    model = whisper.load_model(model_name, download_root="whisper_models/")
+
+    for media_path in media_paths:
+        transcribe_media(media_path, model)
 
 
 if __name__ == "__main__":
