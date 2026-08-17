@@ -9,7 +9,7 @@ from zhconv import convert  # 简繁体转换
 
 VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".flv", ".webm"}
 AUDIO_EXTS = {".aac", ".m4a", ".mp3", ".wav", ".flac", ".ogg"}
-MEDIA_EXTS =  AUDIO_EXTS #|VIDEO_EXTS
+MEDIA_EXTS = AUDIO_EXTS | VIDEO_EXTS
 
 
 def seconds_to_hmsm(seconds):
