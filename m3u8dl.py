@@ -76,6 +76,7 @@ class M3u8Download:
         self._failed_ts = []
         self._success_lock = threading.Lock()
         self._stop_signature_update = threading.Event()
+        self._signature_lock = threading.Lock()
         self._last_progress_time = time.time()
         self._ts_sum = 0
         self._key = base64.b64decode(base64_key.encode()) if base64_key else None
@@ -159,8 +160,19 @@ class M3u8Download:
             not self._stop_signature_update.is_set()
             and self._success_sum != self._ts_sum
         ):
-            self.timestamp, self.signature = utils.getSignature()
+            new_ts, new_sig = utils.getSignature()
+            # Assign the (timestamp, signature) pair atomically under the lock
+            # so that download_ts / get_m3u8_info never observe a mismatched
+            # pair (e.g. new timestamp with the previous signature), which
+            # would produce an invalid signed URL.
+            with self._signature_lock:
+                self.timestamp, self.signature = new_ts, new_sig
             time.sleep(10)
+
+    def _current_signature(self):
+        """Return (timestamp, signature) as an internally-consistent snapshot."""
+        with self._signature_lock:
+            return self.timestamp, self.signature
 
     def printStallStatusLoop(self):
         while not self._stop_signature_update.is_set():
@@ -197,8 +209,9 @@ class M3u8Download:
         if not self._token:
             self._token = utils.getToken()
         token = self._token
+        ts, sig = self._current_signature()
         url = utils.add_signature_for_url(
-            m3u8_url, token, self.timestamp, self.signature
+            m3u8_url, token, ts, sig
         )
         try:
             with requests.get(
@@ -289,12 +302,15 @@ class M3u8Download:
                 token = self._token
                 # Build the signed URL immediately before each retry.  A stale
                 # signature is one of the common reasons Yanhe segment downloads
-                # appear to "stop" after running for a while.
+                # appear to "stop" after running for a while.  The (ts, sig)
+                # snapshot below must come from the lock-protected helper so we
+                # never mix a new timestamp with the previous signature.
+                ts, sig = self._current_signature()
                 ts_url = utils.add_signature_for_url(
                     ts_url_original.split("\n")[0],
                     token,
-                    self.timestamp,
-                    self.signature,
+                    ts,
+                    sig,
                 )
                 with requests.get(
                     ts_url,

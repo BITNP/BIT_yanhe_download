@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import subprocess
 import time
 
@@ -63,6 +64,22 @@ def find_media_files(path="."):
     return sorted(files)
 
 
+def _parse_int_list(text):
+    """Parse a comma/whitespace-separated list of 1-based indices into 0-based ints.
+
+    Rejects anything non-numeric to avoid executing arbitrary expressions
+    (the previous implementation used eval() on user input).
+    """
+    out = []
+    for tok in re.split(r"[\s,]+", text.strip()):
+        if not tok:
+            continue
+        if not tok.lstrip("-").isdigit():
+            raise ValueError(f"not an integer: {tok!r}")
+        out.append(int(tok) - 1)
+    return out
+
+
 def select_files_interactively():
     files = find_media_files(".")
     if not files:
@@ -70,10 +87,12 @@ def select_files_interactively():
 
     for i, f in enumerate(files):
         print(f"[{i}]: {f}")
-    input_list = eval(
-        "[" + input("select media files by input num(split with ','): ") + "]"
-    )
-    selected = [files[i] for i in input_list]
+    raw = input("select media files by input num(split with ','): ")
+    try:
+        selected_idx = _parse_int_list(raw)
+    except ValueError as e:
+        raise ValueError(f"invalid input {raw!r}: {e}") from None
+    selected = [files[i] for i in selected_idx]
     print("selected media files:", selected)
     return selected
 
@@ -85,10 +104,13 @@ def select_model_interactively():
             continue
         print(f"[{len(models)}]: {model}")
         models.append(model)
-    model_index = input("select a model by input a num(default 'base'): ")
+    raw = input("select a model by input a num(default 'base'): ")
+    if not raw.strip():
+        return "base"
     try:
-        return models[eval(model_index)]
-    except Exception:
+        idx = _parse_int_list(raw)[0]
+        return models[idx]
+    except (ValueError, IndexError):
         return "base"
 
 
