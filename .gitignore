@@ -14,4 +14,3 @@ release_*/
 auth.txt
 .snapshot/
 .vscode/
-gen_capture.py

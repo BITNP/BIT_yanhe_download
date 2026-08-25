@@ -143,6 +143,12 @@ class M3u8Download:
                 f"\nDownload incomplete: {self._success_sum}/{self._ts_sum}. "
                 "Please rerun; existing good .ts files will be skipped."
             )
+            if self._failed_ts:
+                print("Failed segments:")
+                for error in self._failed_ts[:8]:
+                    print(f"- {error}")
+                if len(self._failed_ts) > 8:
+                    print(f"- ... and {len(self._failed_ts) - 8} more")
 
     def _print_progress(self) -> None:
         sys.stdout.write(
@@ -189,9 +195,7 @@ class M3u8Download:
                     )
                 ]
             part_files.sort(
-                key=lambda x: int(x.split(".", 1)[0])
-                if x.split(".", 1)[0].isdigit()
-                else x
+                key=self._part_sort_key
             )
             preview = ", ".join(part_files[:8])
             more = "" if len(part_files) <= 8 else f", ... +{len(part_files) - 8}"
@@ -200,6 +204,13 @@ class M3u8Download:
                 f"active/incomplete parts: {len(part_files)}"
                 f"{f' ({preview}{more})' if part_files else ''}"
             )
+
+    @staticmethod
+    def _part_sort_key(filename):
+        prefix = filename.split(".", 1)[0]
+        if prefix.isdigit():
+            return 0, int(prefix)
+        return 1, filename
 
     def get_m3u8_info(self, m3u8_url: str, num_retries: int) -> None:
         """
@@ -238,6 +249,10 @@ class M3u8Download:
             print(e)
             if num_retries > 0:
                 self.get_m3u8_info(m3u8_url, num_retries - 1)
+            else:
+                raise RuntimeError(
+                    f"Failed to get m3u8 info after retries: {m3u8_url}"
+                ) from e
 
     def get_ts_url(self, m3u8_text_str: str) -> None:
         """
@@ -335,22 +350,23 @@ class M3u8Download:
                             f"Incomplete segment ({written}/{expected} bytes)"
                         )
                     os.replace(tmp_name, name)
-                with self._success_lock:
-                    self._success_sum += 1
-                    self._last_progress_time = time.time()
-                    self._print_progress()
-                self._progress_callback(self._success_sum, self._ts_sum, 0)
-                return
+                break
             except Exception as e:
                 last_error = e
                 if os.path.exists(tmp_name):
                     os.remove(tmp_name)
-                if os.path.exists(name):
-                    os.remove(name)
                 if attempt < num_retries:
                     time.sleep(min(5, 0.2 * (attempt + 1)))
+        else:
+            raise RuntimeError(f"Failed to download {name}: {last_error}")
 
-        raise RuntimeError(f"Failed to download {name}: {last_error}")
+        # Reporting failures must not roll back a completed segment or make
+        # the success counter advance more than once.
+        with self._success_lock:
+            self._success_sum += 1
+            self._last_progress_time = time.time()
+            self._print_progress()
+        self._progress_callback(self._success_sum, self._ts_sum, 0)
 
     def download_key(self, key_line, num_retries):
         """
