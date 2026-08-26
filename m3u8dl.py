@@ -65,7 +65,11 @@ class M3u8Download:
         self._progress_callback = progress_callback
         if not os.path.exists(os.path.join(os.getcwd(), self._workDir)):
             os.makedirs(os.path.join(os.getcwd(), self._workDir))
-        self._file_path = os.path.join(os.getcwd(), self._workDir, self._name)
+        self._file_path = os.path.join(
+            os.getcwd(),
+            self._workDir,
+            utils.sanitize_filename(self._name),
+        )
         if os.path.exists(self._file_path + ".mp4"):
             print(f"File '{self._file_path}.mp4' already exists, skip download")
             self._progress_callback(100, 100, 2)

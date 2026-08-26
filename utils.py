@@ -124,15 +124,20 @@ def disambiguate_session_titles(sessions):
 
         started_at = str(session.get("started_at") or "")
         match = re.search(r"[ T](\d{2}):(\d{2})", started_at)
-        suffix = f"{match.group(1)}-{match.group(2)}" if match else ""
+        suffix = f"{match.group(1)}:{match.group(2)}" if match else ""
         if not suffix:
             suffix = f"session-{session.get('id', 'unknown')}"
 
-        candidate = f"{title} ({suffix})"
+        candidate = f"{title} {suffix}"
         if candidate in used_titles:
             candidate = f"{candidate} [{session.get('id', 'unknown')}]"
         session["title"] = candidate
         used_titles.add(candidate)
+
+
+def sanitize_filename(name):
+    """The time suffix in the display name uses ':', which is illegal in Windows file names."""
+    return name.replace(":", "_")
 
 
 def get_course_info(courseID):
@@ -188,7 +193,7 @@ def download_audio(url, path, name):
     while res.status_code != 200:
         time.sleep(0.1)
         res = requests.get(url, headers=_headers)
-    with open(f"{path}/{name}.aac", "wb") as f:
+    with open(f"{path}/{sanitize_filename(name)}.aac", "wb") as f:
         f.write(res.content)
 
 

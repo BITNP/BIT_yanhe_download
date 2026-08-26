@@ -42,11 +42,11 @@ class SessionTitleTests(unittest.TestCase):
 
         self.assertEqual(
             sessions[0]["title"],
-            "第10周 星期四 第2大节 (2026.05.07) (09-55)",
+            "第10周 星期四 第2大节 (2026.05.07) 09:55",
         )
         self.assertEqual(
             sessions[1]["title"],
-            "第10周 星期四 第2大节 (2026.05.07) (11-35)",
+            "第10周 星期四 第2大节 (2026.05.07) 11:35",
         )
         self.assertEqual(sessions[2]["title"], "第10周 星期五 第1大节")
 
@@ -58,8 +58,16 @@ class SessionTitleTests(unittest.TestCase):
 
         utils.disambiguate_session_titles(sessions)
 
-        self.assertEqual(sessions[0]["title"], "重复课程 (session-10)")
-        self.assertEqual(sessions[1]["title"], "重复课程 (session-11)")
+        self.assertEqual(sessions[0]["title"], "重复课程 session-10")
+        self.assertEqual(sessions[1]["title"], "重复课程 session-11")
+
+
+class FilenameTests(unittest.TestCase):
+    def test_colon_in_time_suffix_becomes_underscore(self):
+        self.assertEqual(
+            utils.sanitize_filename("嵌入式系统-李元章-第10周 星期四 第2大节 09:55"),
+            "嵌入式系统-李元章-第10周 星期四 第2大节 09_55",
+        )
 
 
 class DownloaderRegressionTests(unittest.TestCase):

@@ -121,7 +121,7 @@ setInterval(() => {
     const html = `
       <div class="task" id="${task_obj["uuid"]}-task">
         <div class="task-info">
-          <span>${task_obj["name"]}(${download_version})</span>
+          <span>${task_obj["name"]}（${download_version}）</span>
           <div class="status-container">
             <span class="status" id="${task_obj["uuid"]
       }-status">${getDownloadStatusText(task_obj)}</span>
