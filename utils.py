@@ -6,6 +6,15 @@ from hashlib import md5
 
 import requests
 
+
+class TokenError(Exception):
+    """Raised when token retrieval fails."""
+
+
+class CourseError(Exception):
+    """Raised when course information retrieval fails."""
+
+
 # 在延河课堂网站的main.js中4937号的O[N(149, 270, 240, 274)]["k"]()函数的返回值
 magic = "1138b69dfef641d9d7ba49137d2d4875"
 headers = {
@@ -57,7 +66,7 @@ def getToken() -> str:
         )
         data = req.json()["data"]
         if not data:
-            raise Exception("获取Token失败")
+            raise TokenError("获取Token失败")
     return data["token"]
 
 
@@ -155,7 +164,7 @@ def get_course_info(courseID):
     if course.json()["code"] != "0" and course.json()["code"] != 0:
         # print(course.json()["code"])
         # print(course.json()["message"])
-        raise Exception(
+        raise CourseError(
             f"courseID: {courseID}, {course.json()['message']}。请检查您的课程ID，注意它应该是5位数字，从课程信息界面的链接yanhekt.cn/course/***获取，而不是课程播放界面的链接yanhekt.cn/session/***"
         )
     # print(course.json()["data"]["name_zh"])
@@ -163,7 +172,7 @@ def get_course_info(courseID):
     disambiguate_session_titles(videoList)
     name = course.json()["data"]["name_zh"].strip()
     if not videoList:
-        raise Exception(f"该课程({name})没有视频信息，请检查课程ID是否正确")
+        raise CourseError(f"该课程({name})没有视频信息，请检查课程ID是否正确")
 
     return (
         videoList,
