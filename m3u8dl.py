@@ -155,14 +155,8 @@ class M3u8Download:
                     print(f"- ... and {len(self._failed_ts) - 8} more")
 
     def _print_progress(self) -> None:
-        sys.stdout.write(
-            "\r[%-25s](%d/%d)"
-            % (
-                "*" * (100 * self._success_sum // self._ts_sum // 4),
-                self._success_sum,
-                self._ts_sum,
-            )
-        )
+        bar = "*" * (100 * self._success_sum // self._ts_sum // 4)
+        sys.stdout.write(f"\r[{bar:<25}]({self._success_sum}/{self._ts_sum})")
         sys.stdout.flush()
 
     def updateSignatureLoop(self):

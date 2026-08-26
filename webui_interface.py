@@ -56,7 +56,6 @@ current_task_uuid = ""
 
 
 def executor_progress_callback(cur, tot, merge_status):
-    global g_father_queue, current_task_uuid
     g_father_queue.put(
         {
             "uuid": current_task_uuid,
@@ -92,7 +91,6 @@ def execute_one_download_task_worker(task_dict, father_queue):
 
 
 def execute_tasks():
-    global all_task_status
     queue = multiprocessing.Queue()
     while True:
         try:
@@ -161,7 +159,6 @@ def get_course():
 
 @app.route("/new_task", methods=["POST"])
 def new_task():
-    global task_queue, all_task_status
     data = request.json
     course_id = data["course_id"]
     course_number = data["course_number"]
@@ -209,13 +206,11 @@ def new_task():
 
 @app.route("/get_status")
 def get_status():
-    global all_task_status
     return jsonify(all_task_status)
 
 
 @app.route("/kill_task")
 def kill_task():
-    global all_task_status
     uuid = request.args.get("uuid")
     task, id = find_all_task_by_uuid(uuid)
     if task["merge_status"] == 2:

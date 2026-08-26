@@ -2,6 +2,7 @@ import os
 import tempfile
 import threading
 import unittest
+from typing import ClassVar
 from unittest.mock import patch
 
 import m3u8dl
@@ -10,7 +11,7 @@ import utils
 
 class FakeResponse:
     status_code = 200
-    headers = {"Content-Length": "3"}
+    headers: ClassVar[dict[str, str]] = {"Content-Length": "3"}
 
     def __enter__(self):
         return self
