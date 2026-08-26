@@ -7,7 +7,6 @@ import time
 import whisper
 from zhconv import convert  # 简繁体转换
 
-
 VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".flv", ".webm"}
 AUDIO_EXTS = {".aac", ".m4a", ".mp3", ".wav", ".flac", ".ogg"}
 MEDIA_EXTS = AUDIO_EXTS | VIDEO_EXTS
@@ -22,7 +21,7 @@ def seconds_to_hmsm(seconds):
     hours = str(int(seconds // 3600))
     minutes = str(int((seconds % 3600) // 60))
     seconds = seconds % 60
-    milliseconds = str(int(int((seconds - int(seconds)) * 1000)))  # 毫秒留三位
+    milliseconds = str(int((seconds - int(seconds)) * 1000))  # 毫秒留三位
     seconds = str(int(seconds))
     # 补0
     if len(hours) < 2:

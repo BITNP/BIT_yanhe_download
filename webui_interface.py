@@ -89,7 +89,6 @@ def execute_one_download_task_worker(task_dict, father_queue):
             print("Downloading audio...")
             utils.download_audio(audio_url, output, name)
             print("Download audio successfully.")
-    return
 
 
 def execute_tasks():

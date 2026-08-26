@@ -384,11 +384,13 @@ class M3u8Download:
         else:
             true_key_url = self._url.rsplit("/", 1)[0] + "/" + may_key_url
         try:
-            with requests.get(
-                true_key_url, timeout=(5, 30), verify=False, headers=self._headers
-            ) as res:
-                with open(os.path.join(self._file_path, "key"), "wb") as f:
-                    f.write(res.content)
+            with (
+                requests.get(
+                    true_key_url, timeout=(5, 30), verify=False, headers=self._headers
+                ) as res,
+                open(os.path.join(self._file_path, "key"), "wb") as f,
+            ):
+                f.write(res.content)
             return f'{key_line.split(mid_part)[0]}URI="./{self._name}/key"{key_line.split(mid_part)[-1]}'
         except Exception as e:
             print(e)
