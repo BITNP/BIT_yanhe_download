@@ -110,7 +110,7 @@ def select_model_interactively():
     try:
         idx = _parse_int_list(raw)[0]
         return models[idx]
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         return "base"
 
 

@@ -192,15 +192,12 @@ class M3u8Download:
             part_files = []
             if os.path.exists(self._file_path):
                 part_files = [
-                    f for f in os.listdir(self._file_path)
+                    f
+                    for f in os.listdir(self._file_path)
                     if f.endswith(".part")
-                    and not os.path.exists(
-                        os.path.join(self._file_path, f[:-5])
-                    )
+                    and not os.path.exists(os.path.join(self._file_path, f[:-5]))
                 ]
-            part_files.sort(
-                key=self._part_sort_key
-            )
+            part_files.sort(key=self._part_sort_key)
             preview = ", ".join(part_files[:8])
             more = "" if len(part_files) <= 8 else f", ... +{len(part_files) - 8}"
             print(
@@ -225,9 +222,7 @@ class M3u8Download:
             self._token = utils.getToken()
         token = self._token
         ts, sig = self._current_signature()
-        url = utils.add_signature_for_url(
-            m3u8_url, token, ts, sig
-        )
+        url = utils.add_signature_for_url(m3u8_url, token, ts, sig)
         try:
             with requests.get(
                 url, timeout=(3, 30), verify=False, headers=self._headers
@@ -414,10 +409,10 @@ class M3u8Download:
         cmd = [
             "ffmpeg",
             "-y",
-            "-i", f"{self._file_path}.m3u8",
-            "-acodec", "copy",
-            "-vcodec", "copy",
-            "-f", "mp4",
+            *("-i", f"{self._file_path}.m3u8"),
+            *("-acodec", "copy"),
+            *("-vcodec", "copy"),
+            *("-f", "mp4"),
             tmp_output_file,
         ]
         fallback_cmd = [
@@ -425,12 +420,12 @@ class M3u8Download:
             "-y",
             # Some Yanhe segments occasionally contain a few corrupt TS packets.
             # Dropping those packets is preferable to failing the whole merge.
-            "-fflags", "+discardcorrupt",
-            "-err_detect", "ignore_err",
-            "-i", f"{self._file_path}.m3u8",
-            "-acodec", "copy",
-            "-vcodec", "copy",
-            "-f", "mp4",
+            *("-fflags", "+discardcorrupt"),
+            *("-err_detect", "ignore_err"),
+            *("-i", f"{self._file_path}.m3u8"),
+            *("-acodec", "copy"),
+            *("-vcodec", "copy"),
+            *("-f", "mp4"),
             tmp_output_file,
         ]
         try:
