@@ -114,7 +114,7 @@ def execute_tasks():
                     break
                 try:
                     msg = queue.get_nowait()
-                    update_obj, update_id = find_all_task_by_uuid(msg["uuid"])
+                    _update_obj, update_id = find_all_task_by_uuid(msg["uuid"])
                     all_task_status[update_id]["cur"] = msg["cur"]
                     all_task_status[update_id]["tot"] = msg["tot"]
                     all_task_status[update_id]["merge_status"] = msg["merge_status"]

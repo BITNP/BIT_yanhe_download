@@ -143,7 +143,7 @@ def write_srt(result, srt_path):
 
 
 def transcribe_media(media_path, model):
-    base_path, ext = os.path.splitext(media_path)
+    base_path, _ext = os.path.splitext(media_path)
     srt_path = base_path + ".srt"
     temp_audio_path = base_path + ".whisper.m4a"
     audio_for_whisper = media_path

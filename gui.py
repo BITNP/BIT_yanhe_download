@@ -32,7 +32,7 @@ def draw_line(stdscr, text, row):
 
 def draw_menu(stdscr, options, checked, title, subtitle, current_row):
     stdscr.clear()
-    height, width = get_cmd_window_size(stdscr)
+    height, _width = get_cmd_window_size(stdscr)
     draw_line(stdscr, title, 0)
     draw_line(stdscr, subtitle, 1)
     msg = []
@@ -47,7 +47,7 @@ def draw_menu(stdscr, options, checked, title, subtitle, current_row):
 
 def draw_multi_select(stdscr, messages: list, center_row):
     # 获取屏幕的行数和列数
-    height, width = get_cmd_window_size(stdscr)
+    height, _width = get_cmd_window_size(stdscr)
 
     # 计算消息的开始位置以使其居中
     total_messages = len(messages)
@@ -103,8 +103,6 @@ def config(stdscr):
         selected_videos, \
         selected_signal, \
         download_audio
-
-    height, width = get_cmd_window_size(stdscr)
 
     # 开启回显
     curses.echo()
