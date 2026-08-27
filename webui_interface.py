@@ -12,6 +12,7 @@ from flask import (
     request,
     send_from_directory,
 )
+from requests import RequestException
 
 import m3u8dl
 import utils
@@ -150,8 +151,10 @@ def get_course():
         return jsonify({"code": 403, "msg": "。".join(utils.auth_prompt(False))})
     try:
         videoList, courseName, professor = utils.get_course_info(courseID=course_id)
-    except Exception:
+    except utils.CourseError, utils.TokenError, RequestException, OSError:
         return jsonify({"videoList": [], "courseName": "", "professor": ""})
+    except KeyboardInterrupt, SystemExit:
+        raise
     return jsonify(
         {"videoList": videoList, "courseName": courseName, "professor": professor}
     )

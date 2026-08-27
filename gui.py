@@ -1,6 +1,8 @@
 import curses
 import sys
 
+from requests import RequestException
+
 import m3u8dl
 import utils
 
@@ -207,7 +209,8 @@ def main():
                     print("Downloading audio...")
                     utils.download_audio(audio_url, path, name)
                     print("Download audio successfully.")
-        except Exception as e:
+        except (OSError, RequestException, m3u8dl.M3u8Error, utils.TokenError) as e:
+            utils.reraise_ctrl_c(e)
             print(e)
             fail.append(name)
             input(f"下载{name}失败，按回车键开始下一个")

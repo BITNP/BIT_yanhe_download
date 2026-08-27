@@ -15,8 +15,3 @@ whisper = [
     "openai-whisper>=20250625",
     "zhconv>=1.4.3",
 ]
-
-[tool.ruff.lint]
-ignore = [
-    "BLE001",
-]

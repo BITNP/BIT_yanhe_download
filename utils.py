@@ -6,6 +6,8 @@ from hashlib import md5
 
 import requests
 
+import m3u8dl
+
 
 class TokenError(Exception):
     """Raised when token retrieval fails."""
@@ -13,6 +15,12 @@ class TokenError(Exception):
 
 class CourseError(Exception):
     """Raised when course information retrieval fails."""
+
+
+def reraise_ctrl_c(e: BaseException) -> None:
+    """Re-raise KeyboardInterrupt or SystemExit."""
+    if isinstance(e, (KeyboardInterrupt, SystemExit)):
+        raise e
 
 
 # 在延河课堂网站的main.js中4937号的O[N(149, 270, 240, 274)]["k"]()函数的返回值
@@ -210,7 +218,14 @@ def print_help(f: callable):
     def wrap():
         try:
             f()
-        except Exception as e:
+        except (
+            OSError,
+            requests.RequestException,
+            m3u8dl.M3u8Error,
+            TokenError,
+            CourseError,
+        ) as e:
+            reraise_ctrl_c(e)
             print(e)
             print(
                 "If the problem is still not solved, you can report an issue in https://github.com/AuYang261/BIT_yanhe_download/issues."

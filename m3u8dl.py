@@ -11,8 +11,21 @@ from subprocess import run
 
 import requests
 import urllib3
+from requests import RequestException
 
 import utils
+
+
+class M3u8Error(Exception):
+    """Base exception for M3U8 download errors."""
+
+
+class M3u8HttpServerError(M3u8Error):
+    """Raised on unexpected HTTP status codes."""
+
+
+class M3u8DownloadIncompleteError(M3u8Error):
+    """Raised when a segment download is incomplete."""
 
 
 class ThreadPoolExecutorWithQueueSizeLimit(ThreadPoolExecutor):
@@ -130,7 +143,8 @@ class M3u8Download:
             for future in as_completed(futures):
                 try:
                     future.result()
-                except Exception as e:
+                except (OSError, RequestException, AttributeError) as e:
+                    utils.reraise_ctrl_c(e)
                     self._failed_ts.append(str(e))
                     print(f"\n{e}")
         self._stop_signature_update.set()
@@ -222,7 +236,9 @@ class M3u8Download:
                 url, timeout=(3, 30), verify=False, headers=self._headers
             ) as res:
                 if res.status_code != 200:
-                    raise Exception(f"Failed to get m3u8 info: {res.status_code}")
+                    raise M3u8HttpServerError(
+                        f"Failed to get m3u8 info: {res.status_code}"
+                    )
                 self._front_url = res.url.split(res.request.path_url)[0]
                 if "EXT-X-STREAM-INF" in res.text:  # 判定为顶级M3U8文件
                     for line in res.text.split("\n"):
@@ -238,7 +254,8 @@ class M3u8Download:
                 else:
                     m3u8_text_str = res.text
                     self.get_ts_url(m3u8_text_str)
-        except Exception as e:
+        except (OSError, RequestException, AttributeError) as e:
+            utils.reraise_ctrl_c(e)
             print(e)
             if num_retries > 0:
                 self.get_m3u8_info(m3u8_url, num_retries - 1)
@@ -330,7 +347,7 @@ class M3u8Download:
                     if res.status_code != 200:
                         if res.status_code in (401, 403):
                             self._token = utils.getToken()
-                        raise Exception(f"HTTP {res.status_code}")
+                        raise M3u8HttpServerError(f"HTTP {res.status_code}")
                     written = 0
                     expected = int(res.headers.get("Content-Length") or 0)
                     with open(tmp_name, "wb") as ts:
@@ -339,12 +356,13 @@ class M3u8Download:
                                 ts.write(chunk)
                                 written += len(chunk)
                     if expected and written != expected:
-                        raise Exception(
+                        raise M3u8DownloadIncompleteError(
                             f"Incomplete segment ({written}/{expected} bytes)"
                         )
                     os.replace(tmp_name, name)
                 break
-            except Exception as e:
+            except (OSError, RequestException, AttributeError) as e:
+                utils.reraise_ctrl_c(e)
                 last_error = e
                 if os.path.exists(tmp_name):
                     os.remove(tmp_name)
@@ -386,7 +404,8 @@ class M3u8Download:
             ):
                 f.write(res.content)
             return f'{key_line.split(mid_part)[0]}URI="./{self._name}/key"{key_line.split(mid_part)[-1]}'
-        except Exception as e:
+        except (OSError, RequestException, AttributeError) as e:
+            utils.reraise_ctrl_c(e)
             print(e)
             if os.path.exists(os.path.join(self._file_path, "key")):
                 os.remove(os.path.join(self._file_path, "key"))
@@ -429,7 +448,8 @@ class M3u8Download:
                 cmd,
                 check=True,
             )
-        except Exception as e:
+        except (OSError, RequestException, AttributeError) as e:
+            utils.reraise_ctrl_c(e)
             print(f"Normal ffmpeg merge failed, retry with corrupt-packet discard: {e}")
             if os.path.exists(tmp_output_file):
                 os.remove(tmp_output_file)
