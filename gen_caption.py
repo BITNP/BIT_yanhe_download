@@ -7,7 +7,6 @@ import time
 import whisper
 from zhconv import convert  # 简繁体转换
 
-
 VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".flv", ".webm"}
 AUDIO_EXTS = {".aac", ".m4a", ".mp3", ".wav", ".flac", ".ogg"}
 MEDIA_EXTS = AUDIO_EXTS | VIDEO_EXTS
@@ -22,7 +21,7 @@ def seconds_to_hmsm(seconds):
     hours = str(int(seconds // 3600))
     minutes = str(int((seconds % 3600) // 60))
     seconds = seconds % 60
-    milliseconds = str(int(int((seconds - int(seconds)) * 1000)))  # 毫秒留三位
+    milliseconds = str(int((seconds - int(seconds)) * 1000))  # 毫秒留三位
     seconds = str(int(seconds))
     # 补0
     if len(hours) < 2:
@@ -110,7 +109,7 @@ def select_model_interactively():
     try:
         idx = _parse_int_list(raw)[0]
         return models[idx]
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         return "base"
 
 
@@ -144,7 +143,7 @@ def write_srt(result, srt_path):
 
 
 def transcribe_media(media_path, model):
-    base_path, ext = os.path.splitext(media_path)
+    base_path, _ext = os.path.splitext(media_path)
     srt_path = base_path + ".srt"
     temp_audio_path = base_path + ".whisper.m4a"
     audio_for_whisper = media_path

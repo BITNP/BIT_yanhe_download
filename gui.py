@@ -1,6 +1,8 @@
 import curses
 import sys
 
+from requests import RequestException
+
 import m3u8dl
 import utils
 
@@ -32,7 +34,7 @@ def draw_line(stdscr, text, row):
 
 def draw_menu(stdscr, options, checked, title, subtitle, current_row):
     stdscr.clear()
-    height, width = get_cmd_window_size(stdscr)
+    height, _width = get_cmd_window_size(stdscr)
     draw_line(stdscr, title, 0)
     draw_line(stdscr, subtitle, 1)
     msg = []
@@ -47,7 +49,7 @@ def draw_menu(stdscr, options, checked, title, subtitle, current_row):
 
 def draw_multi_select(stdscr, messages: list, center_row):
     # 获取屏幕的行数和列数
-    height, width = get_cmd_window_size(stdscr)
+    height, _width = get_cmd_window_size(stdscr)
 
     # 计算消息的开始位置以使其居中
     total_messages = len(messages)
@@ -103,8 +105,6 @@ def config(stdscr):
         selected_videos, \
         selected_signal, \
         download_audio
-
-    height, width = get_cmd_window_size(stdscr)
 
     # 开启回显
     curses.echo()
@@ -209,7 +209,8 @@ def main():
                     print("Downloading audio...")
                     utils.download_audio(audio_url, path, name)
                     print("Download audio successfully.")
-        except Exception as e:
+        except (OSError, RequestException, m3u8dl.M3u8Error, utils.TokenError) as e:
+            utils.reraise_ctrl_c(e)
             print(e)
             fail.append(name)
             input(f"下载{name}失败，按回车键开始下一个")

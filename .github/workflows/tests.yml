@@ -7,6 +7,14 @@ on:
   workflow_dispatch:
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/ruff-action@v4.1.0
+      - run: ruff check
+      - run: ruff format --check
+
   test:
     runs-on: ubuntu-latest
     steps:

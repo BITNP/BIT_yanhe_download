@@ -12,6 +12,7 @@ from flask import (
     request,
     send_from_directory,
 )
+from requests import RequestException
 
 import m3u8dl
 import utils
@@ -56,7 +57,6 @@ current_task_uuid = ""
 
 
 def executor_progress_callback(cur, tot, merge_status):
-    global g_father_queue, current_task_uuid
     g_father_queue.put(
         {
             "uuid": current_task_uuid,
@@ -89,11 +89,9 @@ def execute_one_download_task_worker(task_dict, father_queue):
             print("Downloading audio...")
             utils.download_audio(audio_url, output, name)
             print("Download audio successfully.")
-    return
 
 
 def execute_tasks():
-    global all_task_status
     queue = multiprocessing.Queue()
     while True:
         try:
@@ -115,7 +113,7 @@ def execute_tasks():
                     break
                 try:
                     msg = queue.get_nowait()
-                    update_obj, update_id = find_all_task_by_uuid(msg["uuid"])
+                    _update_obj, update_id = find_all_task_by_uuid(msg["uuid"])
                     all_task_status[update_id]["cur"] = msg["cur"]
                     all_task_status[update_id]["tot"] = msg["tot"]
                     all_task_status[update_id]["merge_status"] = msg["merge_status"]
@@ -153,8 +151,10 @@ def get_course():
         return jsonify({"code": 403, "msg": "。".join(utils.auth_prompt(False))})
     try:
         videoList, courseName, professor = utils.get_course_info(courseID=course_id)
-    except Exception:
+    except utils.CourseError, utils.TokenError, RequestException, OSError:
         return jsonify({"videoList": [], "courseName": "", "professor": ""})
+    except KeyboardInterrupt, SystemExit:
+        raise
     return jsonify(
         {"videoList": videoList, "courseName": courseName, "professor": professor}
     )
@@ -162,7 +162,6 @@ def get_course():
 
 @app.route("/new_task", methods=["POST"])
 def new_task():
-    global task_queue, all_task_status
     data = request.json
     course_id = data["course_id"]
     course_number = data["course_number"]
@@ -210,13 +209,11 @@ def new_task():
 
 @app.route("/get_status")
 def get_status():
-    global all_task_status
     return jsonify(all_task_status)
 
 
 @app.route("/kill_task")
 def kill_task():
-    global all_task_status
     uuid = request.args.get("uuid")
     task, id = find_all_task_by_uuid(uuid)
     if task["merge_status"] == 2:

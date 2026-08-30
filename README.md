@@ -171,7 +171,9 @@ uv run pyinstaller -F gen_caption.py -i yhkt.ico
 解决方法参考[这里](https://zhuanlan.zhihu.com/p/661325305)，需要修改项目根目录下的 `gen_caption.spec`配置文件，在文件开始处加上以下代码：
 
 ```python
-import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 5)
+import sys
+
+sys.setrecursionlimit(sys.getrecursionlimit() * 5)
 ```
 
 再使用如下命令打包：

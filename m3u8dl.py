@@ -11,8 +11,21 @@ from subprocess import run
 
 import requests
 import urllib3
+from requests import RequestException
 
 import utils
+
+
+class M3u8Error(Exception):
+    """Base exception for M3U8 download errors."""
+
+
+class M3u8HttpServerError(M3u8Error):
+    """Raised on unexpected HTTP status codes."""
+
+
+class M3u8DownloadIncompleteError(M3u8Error):
+    """Raised when a segment download is incomplete."""
 
 
 class ThreadPoolExecutorWithQueueSizeLimit(ThreadPoolExecutor):
@@ -130,7 +143,8 @@ class M3u8Download:
             for future in as_completed(futures):
                 try:
                     future.result()
-                except Exception as e:
+                except (OSError, RequestException, AttributeError) as e:
+                    utils.reraise_ctrl_c(e)
                     self._failed_ts.append(str(e))
                     print(f"\n{e}")
         self._stop_signature_update.set()
@@ -155,14 +169,8 @@ class M3u8Download:
                     print(f"- ... and {len(self._failed_ts) - 8} more")
 
     def _print_progress(self) -> None:
-        sys.stdout.write(
-            "\r[%-25s](%d/%d)"
-            % (
-                "*" * (100 * self._success_sum // self._ts_sum // 4),
-                self._success_sum,
-                self._ts_sum,
-            )
-        )
+        bar = "*" * (100 * self._success_sum // self._ts_sum // 4)
+        sys.stdout.write(f"\r[{bar:<25}]({self._success_sum}/{self._ts_sum})")
         sys.stdout.flush()
 
     def updateSignatureLoop(self):
@@ -192,15 +200,12 @@ class M3u8Download:
             part_files = []
             if os.path.exists(self._file_path):
                 part_files = [
-                    f for f in os.listdir(self._file_path)
+                    f
+                    for f in os.listdir(self._file_path)
                     if f.endswith(".part")
-                    and not os.path.exists(
-                        os.path.join(self._file_path, f[:-5])
-                    )
+                    and not os.path.exists(os.path.join(self._file_path, f[:-5]))
                 ]
-            part_files.sort(
-                key=self._part_sort_key
-            )
+            part_files.sort(key=self._part_sort_key)
             preview = ", ".join(part_files[:8])
             more = "" if len(part_files) <= 8 else f", ... +{len(part_files) - 8}"
             print(
@@ -225,15 +230,15 @@ class M3u8Download:
             self._token = utils.getToken()
         token = self._token
         ts, sig = self._current_signature()
-        url = utils.add_signature_for_url(
-            m3u8_url, token, ts, sig
-        )
+        url = utils.add_signature_for_url(m3u8_url, token, ts, sig)
         try:
             with requests.get(
                 url, timeout=(3, 30), verify=False, headers=self._headers
             ) as res:
                 if res.status_code != 200:
-                    raise Exception(f"Failed to get m3u8 info: {res.status_code}")
+                    raise M3u8HttpServerError(
+                        f"Failed to get m3u8 info: {res.status_code}"
+                    )
                 self._front_url = res.url.split(res.request.path_url)[0]
                 if "EXT-X-STREAM-INF" in res.text:  # 判定为顶级M3U8文件
                     for line in res.text.split("\n"):
@@ -249,7 +254,8 @@ class M3u8Download:
                 else:
                     m3u8_text_str = res.text
                     self.get_ts_url(m3u8_text_str)
-        except Exception as e:
+        except (OSError, RequestException, AttributeError) as e:
+            utils.reraise_ctrl_c(e)
             print(e)
             if num_retries > 0:
                 self.get_m3u8_info(m3u8_url, num_retries - 1)
@@ -341,7 +347,7 @@ class M3u8Download:
                     if res.status_code != 200:
                         if res.status_code in (401, 403):
                             self._token = utils.getToken()
-                        raise Exception(f"HTTP {res.status_code}")
+                        raise M3u8HttpServerError(f"HTTP {res.status_code}")
                     written = 0
                     expected = int(res.headers.get("Content-Length") or 0)
                     with open(tmp_name, "wb") as ts:
@@ -350,12 +356,13 @@ class M3u8Download:
                                 ts.write(chunk)
                                 written += len(chunk)
                     if expected and written != expected:
-                        raise Exception(
+                        raise M3u8DownloadIncompleteError(
                             f"Incomplete segment ({written}/{expected} bytes)"
                         )
                     os.replace(tmp_name, name)
                 break
-            except Exception as e:
+            except (OSError, RequestException, AttributeError) as e:
+                utils.reraise_ctrl_c(e)
                 last_error = e
                 if os.path.exists(tmp_name):
                     os.remove(tmp_name)
@@ -389,13 +396,16 @@ class M3u8Download:
         else:
             true_key_url = self._url.rsplit("/", 1)[0] + "/" + may_key_url
         try:
-            with requests.get(
-                true_key_url, timeout=(5, 30), verify=False, headers=self._headers
-            ) as res:
-                with open(os.path.join(self._file_path, "key"), "wb") as f:
-                    f.write(res.content)
+            with (
+                requests.get(
+                    true_key_url, timeout=(5, 30), verify=False, headers=self._headers
+                ) as res,
+                open(os.path.join(self._file_path, "key"), "wb") as f,
+            ):
+                f.write(res.content)
             return f'{key_line.split(mid_part)[0]}URI="./{self._name}/key"{key_line.split(mid_part)[-1]}'
-        except Exception as e:
+        except (OSError, RequestException, AttributeError) as e:
+            utils.reraise_ctrl_c(e)
             print(e)
             if os.path.exists(os.path.join(self._file_path, "key")):
                 os.remove(os.path.join(self._file_path, "key"))
@@ -414,10 +424,10 @@ class M3u8Download:
         cmd = [
             "ffmpeg",
             "-y",
-            "-i", f"{self._file_path}.m3u8",
-            "-acodec", "copy",
-            "-vcodec", "copy",
-            "-f", "mp4",
+            *("-i", f"{self._file_path}.m3u8"),
+            *("-acodec", "copy"),
+            *("-vcodec", "copy"),
+            *("-f", "mp4"),
             tmp_output_file,
         ]
         fallback_cmd = [
@@ -425,12 +435,12 @@ class M3u8Download:
             "-y",
             # Some Yanhe segments occasionally contain a few corrupt TS packets.
             # Dropping those packets is preferable to failing the whole merge.
-            "-fflags", "+discardcorrupt",
-            "-err_detect", "ignore_err",
-            "-i", f"{self._file_path}.m3u8",
-            "-acodec", "copy",
-            "-vcodec", "copy",
-            "-f", "mp4",
+            *("-fflags", "+discardcorrupt"),
+            *("-err_detect", "ignore_err"),
+            *("-i", f"{self._file_path}.m3u8"),
+            *("-acodec", "copy"),
+            *("-vcodec", "copy"),
+            *("-f", "mp4"),
             tmp_output_file,
         ]
         try:
@@ -438,7 +448,8 @@ class M3u8Download:
                 cmd,
                 check=True,
             )
-        except Exception as e:
+        except (OSError, RequestException, AttributeError) as e:
+            utils.reraise_ctrl_c(e)
             print(f"Normal ffmpeg merge failed, retry with corrupt-packet discard: {e}")
             if os.path.exists(tmp_output_file):
                 os.remove(tmp_output_file)
