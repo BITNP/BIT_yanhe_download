@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: "pyproject.toml"
+      - uses: astral-sh/setup-uv@v10.0.1
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Run tests
+        run: uv run -m unittest discover --start-directory tests --verbose

@@ -1,5 +1,7 @@
 import os
+import re
 import time
+from collections import Counter
 from hashlib import md5
 
 import requests
@@ -106,6 +108,38 @@ def test_auth(courseID):
     return bool(res.json()["data"])
 
 
+def disambiguate_session_titles(sessions):
+    """Add the start time only when multiple sessions have the same title."""
+    title_counts = Counter(session.get("title", "") for session in sessions)
+    used_titles = {
+        session.get("title", "")
+        for session in sessions
+        if title_counts[session.get("title", "")] == 1
+    }
+
+    for session in sessions:
+        title = session.get("title", "")
+        if not title or title_counts[title] == 1:
+            continue
+
+        started_at = str(session.get("started_at") or "")
+        match = re.search(r"[ T](\d{2}):(\d{2})", started_at)
+        suffix = f"{match.group(1)}:{match.group(2)}" if match else ""
+        if not suffix:
+            suffix = f"session-{session.get('id', 'unknown')}"
+
+        candidate = f"{title} {suffix}"
+        if candidate in used_titles:
+            candidate = f"{candidate} [{session.get('id', 'unknown')}]"
+        session["title"] = candidate
+        used_titles.add(candidate)
+
+
+def sanitize_filename(name):
+    """The time suffix in the display name uses ':', which is illegal in Windows file names."""
+    return name.replace(":", "_")
+
+
 def get_course_info(courseID):
     courseID = courseID.strip()
 
@@ -126,6 +160,7 @@ def get_course_info(courseID):
         )
     # print(course.json()["data"]["name_zh"])
     videoList = res.json()["data"]
+    disambiguate_session_titles(videoList)
     name = course.json()["data"]["name_zh"].strip()
     if not videoList:
         raise Exception(f"该课程({name})没有视频信息，请检查课程ID是否正确")
@@ -158,7 +193,7 @@ def download_audio(url, path, name):
     while res.status_code != 200:
         time.sleep(0.1)
         res = requests.get(url, headers=_headers)
-    with open(f"{path}/{name}.aac", "wb") as f:
+    with open(f"{path}/{sanitize_filename(name)}.aac", "wb") as f:
         f.write(res.content)
 
 
