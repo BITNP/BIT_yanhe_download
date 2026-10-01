@@ -1,3 +1,4 @@
+import getpass
 import os
 import sys
 
@@ -11,6 +12,41 @@ headers = {
 }
 
 
+def login_prompt():
+    """Obtain a token; validation and persistence belong to ensure_auth."""
+    while True:
+        choice = input("登录方式 [1 token（默认）/2 账密 SSO/q 取消]: ").strip().lower()
+        if choice == "q":
+            raise EOFError
+        if choice in ("", "1", "2"):
+            break
+        print("请输入 1、2 或 q。")
+
+    if choice == "2":
+        try:
+            from sso_login import prompt_login
+
+            return prompt_login()
+        except utils.AuthError as error:
+            print(str(error))
+        except ImportError:
+            print("账密登录组件不可用；可运行 uv sync --extra sso 安装依赖，或改用 token 登录。")
+        while True:
+            fallback = input("按 Enter 改用 token，或输入 q 取消: ").strip().lower()
+            if fallback == "q":
+                raise EOFError
+            if fallback == "":
+                break
+            print("请按 Enter 或输入 q。")
+
+    for line in utils.auth_prompt():
+        print(line)
+    token = getpass.getpass("Token（输入隐藏，留空取消）: ").strip()
+    if not token:
+        raise EOFError
+    return token
+
+
 @utils.print_help
 def main():
     if len(sys.argv) == 1:
@@ -18,12 +54,11 @@ def main():
     else:
         courseID = sys.argv[1]
 
-    if not utils.read_auth() or not utils.test_auth(courseID=courseID):
-        auth = input("。".join(utils.auth_prompt()))
-        utils.write_auth(auth)
-        if not utils.test_auth(courseID=courseID):
-            print("身份验证失败")
-            sys.exit()
+    try:
+        utils.ensure_auth(login_prompt)
+    except (utils.AuthError, EOFError, KeyboardInterrupt, OSError) as error:
+        print(str(error) if isinstance(error, utils.AuthError) else "登录取消或认证文件无法保存。")
+        raise SystemExit(1)
     videoList, courseName, professor = utils.get_course_info(courseID=courseID)
 
     print(f"课 程 名: {courseName}")

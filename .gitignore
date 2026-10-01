@@ -12,5 +12,6 @@ release_*/
 .idea
 .DS_Store
 auth.txt
+.env
 .snapshot/
 .vscode/

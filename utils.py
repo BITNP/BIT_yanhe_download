@@ -1,10 +1,16 @@
 import os
 import re
+import tempfile
 import time
 from collections import Counter
 from hashlib import md5
+from pathlib import Path
 
 import requests
+
+
+class AuthError(RuntimeError):
+    """An authentication failure safe to display without exposing secrets."""
 
 # 在延河课堂网站的main.js中4937号的O[N(149, 270, 240, 274)]["k"]()函数的返回值
 magic = "1138b69dfef641d9d7ba49137d2d4875"
@@ -88,6 +94,63 @@ def write_auth(auth):
     headers["Authorization"] = "Bearer " + auth
     with open("auth.txt", "w") as f:
         f.write(auth)
+
+
+def save_auth(token, path="auth.txt"):
+    """Atomically save an API-validated token without importing SSO code."""
+    if not isinstance(token, str) or not token or any(char.isspace() for char in token):
+        raise AuthError("身份认证码为空或包含空白字符；原认证文件未修改。")
+    destination = Path(path)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=destination.parent,
+            prefix=".yanhe-auth-", delete=False,
+        ) as output:
+            temporary = Path(output.name)
+            output.write(token)
+        os.replace(temporary, destination)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def _token_is_valid(token):
+    if not isinstance(token, str) or not token or any(char.isspace() for char in token):
+        return False
+    try:
+        # Validate with Yanhe itself, independently of the optional CAS flow.
+        candidate_headers = dict(headers, Authorization="Bearer " + token)
+        response = requests.get(
+            "https://cbiz.yanhekt.cn/v1/user", headers=candidate_headers,
+            timeout=15, allow_redirects=False,
+        )
+        if response.status_code != 200:
+            raise ValueError("Unexpected authentication response")
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise ValueError("Unexpected authentication payload")
+        code, data = str(payload.get("code")), payload.get("data")
+        if code == "0" and isinstance(data, dict) and data:
+            return True
+        if code == "61101113":
+            return False
+        raise ValueError("Authentication state unknown")
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        raise AuthError("暂时无法校验认证，请检查网络后重试；原认证文件未修改。") from None
+
+
+def ensure_auth(login_prompt):
+    """Reuse a valid cache, otherwise validate and save the selected login result."""
+    token = read_auth()
+    if token and _token_is_valid(token):
+        return True
+    token = login_prompt()
+    if not _token_is_valid(token):
+        raise AuthError("身份认证码无效或已过期；原认证文件未修改。")
+    save_auth(token)
+    headers["Authorization"] = "Bearer " + token
+    return True
 
 
 def remove_auth():

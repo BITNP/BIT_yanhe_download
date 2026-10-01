@@ -11,6 +11,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+sso = ["pycryptodome>=3.23.0"]
 whisper = [
     "openai-whisper>=20250625",
     "zhconv>=1.4.3",
